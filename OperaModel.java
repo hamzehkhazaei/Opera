@@ -1,5 +1,21 @@
 package opera;
 
+import opera.Core.LQM;
+import opera.KalmanFilter.EstimationResults;
+import opera.KalmanFilter.KalmanConfiguration;
+import opera.KalmanFilter.KalmanEstimator;
+import opera.KalmanFilter.ModelParameter;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import util.MeasuresUtil;
+
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathFactory;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.PrintWriter;
@@ -8,68 +24,96 @@ import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathFactory;
-
-import opera.KalmanFilter.ModelParameter;
-import org.w3c.dom.Document;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-
-import opera.Core.LQM;
-import opera.KalmanFilter.EstimationResults;
-import opera.KalmanFilter.KalmanConfiguration;
-import opera.KalmanFilter.KalmanEstimator;
-import util.MeasuresUtil;
-
 /**
  * @author marin
  */
 public class OperaModel {
-    LQM model = null;
-    Document doc = null;
-    Document results = null;
-
-    XPath m_xPath = XPathFactory.newInstance().newXPath();
-
-    PrintWriter writer = null;
-
     private final String MODEL_THINK_TIME = "/Model/Workloads/ThinkTimes/ThinkTime/@time";
     private final String MODEL_THINK_TIME_SCENARIO = "/Model/Workloads/ThinkTimes/ThinkTime[@scenario='%s']/@time";
-
     private final String MODEL_POPULATION = "/Model/Workloads/Users/text()";
     private final String MODEL_POPULATION_SCENARIO = "/Model/Workloads/WorkloadMixes[%d]/Mix[@scenario='%s']/@load";
-
     private final String MODEL_SCENARIO_DEMAND_CPU = "/Model/Scenarios/Scenario[@name='%s']/Call[@callee='%s']/Demand/@CPUDemand";
     private final String MODEL_SCENARIO_DEMAND_DISK = "/Model/Scenarios/Scenario[@name='%s']/Call[@callee='%s']/Demand/@DiskDemand";
-
     private final String MODEL_CONTAINER_THREADS = "/Model/Topology/Cluster/Container[@name='%s']/@parallelism";
-
     private final String MODEL_NODE_CPU_MULTIPLICITY = "/Model/Topology/Node[@name='%s']/@CPUParallelism";
     private final String MODEL_NODE_DISK_MULTIPLICITY = "/Model/Topology/Node[@name='%s']/@DiskParallelism";
-
     private final String RESULTS_SERVICE_ALLOCATION = "/Results/Architecture/Service[@name='%s']/@allocatedToContainer";
-
     private final String RESULTS_RESPONSE_TIME_SCENARIO = "/Results/Architecture/Workloads[%d]/Scenario[@name='%s']/ResponseTime";
     private final String RESULTS_RESPONSE_TIME_CONTAINER = "/Results/Architecture/Workloads[%d]/Container[@name='%s']/Scenario[@scenarioName='%s']/@responseTime";
     private final String RESULTS_RESPONSE_TIME_SERVICE = "/Results/Architecture/Workloads[%d]/Service[@name='%s']/Scenario[@name='%s']/@responseTime";
-
     private final String RESULTS_UTILIZATION_CONTAINER = "/Results/Architecture/Workloads[%d]/Container[@name='%s']/@Utilization";
     private final String RESULTS_UTILIZATION_SERVICE = "/Results/Architecture/Workloads[%d]/Service[@name='%s']/@Utilization";
     private final String RESULTS_UTILIZATION_NODE = "/Results/Architecture/Workloads[%d]/Node[@name='%s']/%s/Utilization";
-
     private final String RESULTS_THROUGHPUT = "/Results/Architecture/Workloads[%d]/Scenario[@name='%s']/Throughput";
-
+    LQM model = null;
+    Document doc = null;
+    Document results = null;
+    XPath m_xPath = XPathFactory.newInstance().newXPath();
+    PrintWriter writer = null;
     DecimalFormat formatter = new DecimalFormat("#0.00000");
 
     public OperaModel() throws FileNotFoundException, UnsupportedEncodingException {
         super();
         writer = new PrintWriter("./output/modelParametersFinal.csv", "UTF-8");
         writer.println("CPUDem_Proxy" + "," + "CPUDem_LB" + "," + "CPUDem_Web" + "," + "CPUDem_Analytic" + "," + "CPUDem_Db");
+    }
+
+    public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
+
+        OperaModel theModel = new OperaModel();
+
+        theModel.setModel("./input/BigDataApp.model.pxl");
+
+        KalmanEstimator theEstimator = null;
+        KalmanConfiguration kalmanConfig = new KalmanConfiguration();
+        kalmanConfig.withConfigFile("./input/BigDataApp.kalman.config")
+                .withModel(theModel)
+                .withSetting(KalmanConfiguration.ITERATIONS_MAX, "10");
+
+        theEstimator = new KalmanEstimator(kalmanConfig);
+        MeasuresUtil rm = new MeasuresUtil("./input/metrics2.txt", 80, 5);
+
+        ArrayList arrivals = rm.getArrivals();
+
+        HashMap metrics = rm.getMetrics();
+
+        ArrayList cpuLBUtil = (ArrayList) metrics.get("cpuLBUtil");
+        ArrayList cpuWebUtil = (ArrayList) metrics.get("cpuWebUtil");
+        ArrayList cpuAnalyticUtil = (ArrayList) metrics.get("cpuAnalyticUtil");
+        ArrayList cpuDBUtil = (ArrayList) metrics.get("cpuDBUtil");
+        ArrayList respTime = (ArrayList) metrics.get("respTime");
+        ArrayList throughput = (ArrayList) metrics.get("throughput");
+
+        int noOfSenarios = 1;
+        int thinkTime = 500;
+
+        // remove this loop if you don't want calibration
+        for (int i = 0; i < rm.getNoOfMeasurs(); i++) // there are 30 samples
+        {
+            // put the workload here (arrival rate: req/s); should contain workload foreach scenario
+            Double workload = (Double) arrivals.get(i);
+            // put the values here, keep the order from the kalman config files
+            // the values are: CPU utilization web, CPU Analytic, CPU utilization db, response times for
+            // each scenario, throughput for each scenario
+            Double responseTime = (Double) respTime.get(i);
+
+            // set workload in the model
+            for (int j = 0; j < noOfSenarios; j++) {
+                theModel.SetPopulation("select 0", workload * (thinkTime + responseTime));
+                // the response time should be in the "measuredMetrics" vector
+            }
+            theModel.solve();
+
+//            calibrate model;
+            double[] measuredMetrics = {(Double) cpuLBUtil.get(i), (Double) cpuWebUtil.get(i),
+                    (Double) cpuAnalyticUtil.get(i), (Double) cpuDBUtil.get(i), responseTime, (Double) throughput.get(i)};
+            EstimationResults results = theEstimator.EstimateModelParameters(measuredMetrics);
+            System.out.println(results.toString());
+            ModelParameter[] mp = results.getModelParametersFinal();
+            theModel.writeToFile(mp);
+        }
+        theModel.SaveModelToXmlFile("./output/FinalModel.pxl");
+        theModel.writer.close();
     }
 
     public void setModel(String pxlFile) {
@@ -81,7 +125,6 @@ public class OperaModel {
         model = new LQM();
         doc = model.parsePxlFromString(pxlModel);
     }
-
 
     /**
      * Sets the total population. The total population is not related to any
@@ -740,89 +783,4 @@ public class OperaModel {
         }
         writer.println(line);
     }
-
-    public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
-
-        OperaModel theModel = new OperaModel();
-
-        theModel.setModel("./input/BigDataApp.model.pxl");
-
-        KalmanEstimator theEstimator = null;
-        KalmanConfiguration kalmanConfig = new KalmanConfiguration();
-        kalmanConfig.withConfigFile("./input/BigDataApp.kalman.config")
-                .withModel(theModel)
-                .withSetting(KalmanConfiguration.ITERATIONS_MAX, "10");
-
-        theEstimator = new KalmanEstimator(kalmanConfig);
-        MeasuresUtil rm = new MeasuresUtil("./input/metrics2.txt", 80, 5);
-
-        ArrayList arrivals = rm.getArrivals();
-
-        HashMap metrics = rm.getMetrics();
-
-        ArrayList cpuLBUtil = (ArrayList) metrics.get("cpuLBUtil");
-        ArrayList cpuWebUtil = (ArrayList) metrics.get("cpuWebUtil");
-        ArrayList cpuAnalyticUtil = (ArrayList) metrics.get("cpuAnalyticUtil");
-        ArrayList cpuDBUtil = (ArrayList) metrics.get("cpuDBUtil");
-        ArrayList respTime = (ArrayList) metrics.get("respTime");
-        ArrayList throughput = (ArrayList) metrics.get("throughput");
-
-        int noOfSenarios = 1;
-        int thinkTime = 500;
-
-        // remove this loop if you don't want calibration
-        for (int i = 0; i < rm.getNoOfMeasurs(); i++) // there are 30 samples
-        {
-            // put the workload here (arrival rate: req/s); should contain workload foreach scenario
-            Double workload = (Double) arrivals.get(i);
-            // put the values here, keep the order from the kalman config files
-            // the values are: CPU utilization web, CPU Analytic, CPU utilization db, response times for
-            // each scenario, throughput for each scenario
-            Double responseTime = (Double) respTime.get(i);
-
-            // set workload in the model
-            for (int j = 0; j < noOfSenarios; j++) {
-                theModel.SetPopulation("select 0", workload * (thinkTime + responseTime));
-                // the response time should be in the "measuredMetrics" vector
-            }
-            theModel.solve();
-
-//            calibrate model;
-            double[] measuredMetrics = {(Double) cpuLBUtil.get(i), (Double) cpuWebUtil.get(i),
-                    (Double) cpuAnalyticUtil.get(i), (Double) cpuDBUtil.get(i), responseTime, (Double) throughput.get(i)};
-            EstimationResults results = theEstimator.EstimateModelParameters(measuredMetrics);
-            System.out.println(results.toString());
-            ModelParameter[] mp = results.getModelParametersFinal();
-            theModel.writeToFile(mp);
-        }
-        theModel.SaveModelToXmlFile("./output/FinalModel.pxl");
-        theModel.writer.close();
-    }
-//    public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
-//
-//        OperaModel theModel = new OperaModel();
-//        theModel.setModel("./input/BigDataApp.model.pxl");
-//        int records = 600;
-//        MeasuresUtil rm = new MeasuresUtil("./input/metrics2.txt", 200, records);
-//        HashMap<String, Double> demands = rm.getAvgCPUDemands();
-//        HashMap<String, ArrayList<Double>> metrics = rm.getMetrics();
-//
-//        for(int i = 0; i<records; i++){
-//            theModel.SetCpuDemand("select 0", "LBServer", metrics.get("cpuLBUtil").get(i)/metrics.get("throughput").get(i));
-//            theModel.SetCpuDemand("select 0", "WebServer", metrics.get("cpuWebUtil").get(i)/metrics.get("throughput").get(i));
-//            theModel.SetCpuDemand("select 0", "AnalyticServer", metrics.get("cpuAnalyticUtil").get(i)/metrics.get("throughput").get(i));
-//            theModel.SetCpuDemand("select 0", "Database", metrics.get("cpuDBUtil").get(i)/metrics.get("throughput").get(i));
-//            theModel.solve();
-//
-//        }
-//
-//        System.out.println("Throughput: " + theModel.GetThroughput("select 0") + " -- " + rm.getAveMetrics().get("throughput"));
-//        System.out.println("Response Time: " + theModel.GetResponseTimeScenario("select 0") + " -- " + rm.getAveMetrics().get("respTime"));
-//        System.out.println("CPU Utilization Web: " + theModel.GetUtilizationContainer("WebContainer") + " -- " + rm.getAveMetrics().get("aveCPUWebUtil"));
-//        System.out.println("CPU Utilization Analytic: " + theModel.GetUtilizationContainer("AnalyticContainer") + " -- " + rm.getAveMetrics().get("aveCPUAnalyticUtil"));
-//
-//
-//        theModel.SaveModelToXmlFile("./output/FinalModel.pxl");
-//    }
-
 }
