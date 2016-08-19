@@ -45,6 +45,15 @@ public class OperaInterface {
         this.finalModel = finalModel;
     }
 
+    public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
+        OperaInterface oi = new OperaInterface("./input/BigDataApp.model.pxl", "./input/BigDataApp.kalman.config", "./input/metrics2.txt",
+                "15", 500, 80, 5, 1, "./output/FinalModel.pxl");
+        oi.trainModel();
+        MetricCollection theMetrics = new MetricCollection();
+        oi.calibrateModel(theMetrics);
+        oi.getContainersCnt(theMetrics, 20.0, 80.0, 20.0, 80.0);
+    }
+
     private void trainModel() throws FileNotFoundException, UnsupportedEncodingException {
         operaModel.setModel(inputModel);
 
@@ -121,14 +130,5 @@ public class OperaInterface {
 
         double[] measuredMetrics = {cpuLBUtil, cpuWebUtil, cpuAnalyticUtil, cpuDBUtil, respTime, throughput};
         theEstimator.EstimateModelParameters(measuredMetrics);
-    }
-
-    public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
-        OperaInterface oi = new OperaInterface("./input/BigDataApp.model.pxl", "./input/BigDataApp.kalman.config", "./input/metrics2.txt",
-                "15", 500, 80, 5, 1, "./output/FinalModel.pxl");
-        oi.trainModel();
-        MetricCollection theMetrics = new MetricCollection();
-        oi.calibrateModel(theMetrics);
-        oi.getContainersCnt(theMetrics);
     }
 }
