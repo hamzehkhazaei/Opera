@@ -14,7 +14,7 @@ import java.util.HashMap;
 
 /**
  * Created by hamzeh on 2016-08-18.
- *
+ * This model is used for ICSE17.
  */
 public class OperaInterface {
 
