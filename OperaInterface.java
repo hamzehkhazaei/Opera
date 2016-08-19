@@ -119,17 +119,33 @@ public class OperaInterface {
         // to control the autonomic manager in case the Opera model did not converge.
         int controlCounter = 1;
 
-        // if application under utilized; do nothing for now.
-        if (webCPUUtil < webCPULowUtil || analyticCPUUtil < analyticCPULowUtil) {
-            // do nothing for now.
-            newDeployment.add(webContainerCnt.intValue());
-            newDeployment.add(sparkContainersCnt.intValue());
-            return newDeployment;
+        // if Web cluster is under utilized scale it down one by one until bring it to the normal range.
+        if (webCPUUtil < webCPULowUtil) {
+            operaModel.SetNodeMultiplicity("WebHost", --webContNo);
+            operaModel.solve();
+            while (operaModel.GetUtilizationNode("WebHost", "CPU") < webCPULowUtil && controlCounter < 4) {
+                operaModel.SetNodeMultiplicity("WebHost", --webContNo);
+                operaModel.solve();
+                controlCounter++;
+            }
+        }
+        // if Spark cluster is under utilized scale it down one by one until bring it to the normal range.
+        controlCounter = 1;
+        if (analyticCPUUtil < analyticCPULowUtil) {
+            operaModel.SetNodeMultiplicity("AnalyticHost", --analyticContNo);
+            operaModel.solve();
+            while (operaModel.GetUtilizationNode("AnalyticHost", "CPU") < analyticCPULowUtil && controlCounter < 4) {
+                operaModel.SetNodeMultiplicity("AnalyticHost", --analyticContNo);
+                operaModel.solve();
+                controlCounter++;
+            }
         }
 
         // if tomcat web server is over utilized scale it up one by one until bring it to the normal range.
         if (webCPUUtil > webCPUUPUtil) {
-            while (operaModel.GetUtilizationContainer("WebContainer") > webCPUUPUtil && controlCounter < 5) {
+            operaModel.SetNodeMultiplicity("WebHost", ++webContNo);
+            operaModel.solve();
+            while (operaModel.GetUtilizationNode("WebHost", "CPU") > webCPUUPUtil && controlCounter < 4) {
                 operaModel.SetNodeMultiplicity("WebHost", ++webContNo);
                 operaModel.solve();
                 controlCounter++;
@@ -138,8 +154,10 @@ public class OperaInterface {
         // if Spark cluster is over utilized scale it up one by one until bring it to the normal range.
         controlCounter = 1;
         if (analyticCPUUtil > analyticCPUUPUtil) {
-            while (operaModel.GetUtilizationContainer("AnalyticContainer") > analyticCPUUPUtil && controlCounter < 5) {
-                operaModel.SetNodeMultiplicity("WebHost", ++analyticContNo);
+            operaModel.SetNodeMultiplicity("AnalyticHost", ++analyticContNo);
+            operaModel.solve();
+            while (operaModel.GetUtilizationNode("AnalyticHost", "CPU") > analyticCPUUPUtil && controlCounter < 4) {
+                operaModel.SetNodeMultiplicity("AnalyticHost", ++analyticContNo);
                 operaModel.solve();
                 controlCounter++;
             }
@@ -168,7 +186,7 @@ public class OperaInterface {
     }
 
     public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
-        OperaInterface oi = new OperaInterface("./input/BigDataApp.model.pxl", "./input/BigDataApp.kalman.config", "./input/metrics2.txt",
+        OperaInterface oi = new OperaInterface("./input/BigDataApp.model.pxl", "./input/BigDataApp.kalman.config", "./input/measured_metrics.txt",
                 "15", OperaInterface.THINK_TIME, 80, 5, OperaInterface.NO_SCENARIOS, "./output/FinalModel.pxl");
         oi.trainModel();
         MetricCollection theMetrics = new MetricCollection();

@@ -58,63 +58,6 @@ public class OperaModel {
         writer.println("CPUDem_Proxy" + "," + "CPUDem_LB" + "," + "CPUDem_Web" + "," + "CPUDem_Analytic" + "," + "CPUDem_Db");
     }
 
-    public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
-
-        OperaModel theModel = new OperaModel();
-
-        theModel.setModel("./input/BigDataApp.model.pxl");
-
-        KalmanEstimator theEstimator = null;
-        KalmanConfiguration kalmanConfig = new KalmanConfiguration();
-        kalmanConfig.withConfigFile("./input/BigDataApp.kalman.config")
-                .withModel(theModel)
-                .withSetting(KalmanConfiguration.ITERATIONS_MAX, "10");
-
-        theEstimator = new KalmanEstimator(kalmanConfig);
-        MeasuresUtil rm = new MeasuresUtil("./input/metrics2.txt", 80, 5);
-
-        ArrayList arrivals = rm.getArrivals();
-
-        HashMap metrics = rm.getMetrics();
-
-        ArrayList cpuLBUtil = (ArrayList) metrics.get("cpuLBUtil");
-        ArrayList cpuWebUtil = (ArrayList) metrics.get("cpuWebUtil");
-        ArrayList cpuAnalyticUtil = (ArrayList) metrics.get("cpuAnalyticUtil");
-        ArrayList cpuDBUtil = (ArrayList) metrics.get("cpuDBUtil");
-        ArrayList respTime = (ArrayList) metrics.get("respTime");
-        ArrayList throughput = (ArrayList) metrics.get("throughput");
-
-        int noOfSenarios = 1;
-        int thinkTime = 500;
-
-        // remove this loop if you don't want calibration
-        for (int i = 0; i < rm.getNoOfMeasurs(); i++) // there are 30 samples
-        {
-            // put the workload here (arrival rate: req/s); should contain workload foreach scenario
-            Double workload = (Double) arrivals.get(i);
-            // put the values here, keep the order from the kalman config files
-            // the values are: CPU utilization web, CPU Analytic, CPU utilization db, response times for
-            // each scenario, throughput for each scenario
-            Double responseTime = (Double) respTime.get(i);
-
-            // set workload in the model
-            for (int j = 0; j < noOfSenarios; j++) {
-                theModel.SetPopulation("select 0", workload * (thinkTime + responseTime));
-                // the response time should be in the "measuredMetrics" vector
-            }
-            theModel.solve();
-
-//            calibrate model;
-            double[] measuredMetrics = {(Double) cpuLBUtil.get(i), (Double) cpuWebUtil.get(i),
-                    (Double) cpuAnalyticUtil.get(i), (Double) cpuDBUtil.get(i), responseTime, (Double) throughput.get(i)};
-            EstimationResults results = theEstimator.EstimateModelParameters(measuredMetrics);
-            System.out.println(results.toString());
-            ModelParameter[] mp = results.getModelParametersFinal();
-            theModel.writeToFile(mp);
-        }
-        theModel.SaveModelToXmlFile("./output/FinalModel.pxl");
-        theModel.writer.close();
-    }
 
     public void setModel(String pxlFile) {
         model = new LQM();
@@ -783,4 +726,63 @@ public class OperaModel {
         }
         writer.println(line);
     }
+
+    public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
+
+        OperaModel theModel = new OperaModel();
+
+        theModel.setModel("./input/BigDataApp.model.pxl");
+
+        KalmanEstimator theEstimator = null;
+        KalmanConfiguration kalmanConfig = new KalmanConfiguration();
+        kalmanConfig.withConfigFile("./input/BigDataApp.kalman.config")
+                .withModel(theModel)
+                .withSetting(KalmanConfiguration.ITERATIONS_MAX, "10");
+
+        theEstimator = new KalmanEstimator(kalmanConfig);
+        MeasuresUtil rm = new MeasuresUtil("./input/measured_metrics.txt", 80, 3);
+
+        ArrayList arrivals = rm.getArrivals();
+
+        HashMap metrics = rm.getMetrics();
+
+        ArrayList cpuLBUtil = (ArrayList) metrics.get("cpuLBUtil");
+        ArrayList cpuWebUtil = (ArrayList) metrics.get("cpuWebUtil");
+        ArrayList cpuAnalyticUtil = (ArrayList) metrics.get("cpuAnalyticUtil");
+        ArrayList cpuDBUtil = (ArrayList) metrics.get("cpuDBUtil");
+        ArrayList respTime = (ArrayList) metrics.get("respTime");
+        ArrayList throughput = (ArrayList) metrics.get("throughput");
+
+        int noOfSenarios = 1;
+        int thinkTime = 500;
+
+        // remove this loop if you don't want calibration
+        for (int i = 0; i < rm.getNoOfMeasurs(); i++) // there are 30 samples
+        {
+            // put the workload here (arrival rate: req/s); should contain workload foreach scenario
+            Double workload = (Double) arrivals.get(i);
+            // put the values here, keep the order from the kalman config files
+            // the values are: CPU utilization web, CPU Analytic, CPU utilization db, response times for
+            // each scenario, throughput for each scenario
+            Double responseTime = (Double) respTime.get(i);
+
+            // set workload in the model
+            for (int j = 0; j < noOfSenarios; j++) {
+                theModel.SetPopulation("select 0", workload * (thinkTime + responseTime));
+                // the response time should be in the "measuredMetrics" vector
+            }
+            theModel.solve();
+
+//            calibrate model;
+            double[] measuredMetrics = {(Double) cpuLBUtil.get(i), (Double) cpuWebUtil.get(i),
+                    (Double) cpuAnalyticUtil.get(i), (Double) cpuDBUtil.get(i), responseTime, (Double) throughput.get(i)};
+            EstimationResults results = theEstimator.EstimateModelParameters(measuredMetrics);
+            System.out.println(results.toString());
+            ModelParameter[] mp = results.getModelParametersFinal();
+            theModel.writeToFile(mp);
+        }
+        theModel.SaveModelToXmlFile("./output/FinalModel.pxl");
+        theModel.writer.close();
+    }
+
 }
