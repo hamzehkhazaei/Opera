@@ -104,8 +104,7 @@ public class OperaInterface {
      * desired range.
      */
     public ArrayList<Integer> getContainersCnt(MetricCollection theMetrics, Double webCPULowUtil, Double webCPUUPUtil,
-                                               Double analyticCPULowUtil, Double analyticCPUUPUtil)
-    {
+                                               Double analyticCPULowUtil, Double analyticCPUUPUtil) {
         calibrateModel(theMetrics);
 
         ArrayList<Integer> newDeployment = new ArrayList<Integer>();
@@ -119,22 +118,24 @@ public class OperaInterface {
         // to control the autonomic manager in case the Opera model did not converge.
         int controlCounter = 1;
 
-        // if Web cluster is under utilized scale it down one by one until bring it to the normal range.
+        // if Web cluster is under utilized scale it down one by one until bring it to the normal range or we get down to
+        // one web container.
         if (webCPUUtil < webCPULowUtil) {
             operaModel.SetNodeMultiplicity("WebHost", --webContNo);
             operaModel.solve();
-            while (operaModel.GetUtilizationNode("WebHost", "CPU") < webCPULowUtil && controlCounter < 4) {
+            while (operaModel.GetUtilizationNode("WebHost", "CPU") < webCPULowUtil && controlCounter < 4 && webContNo > 1) {
                 operaModel.SetNodeMultiplicity("WebHost", --webContNo);
                 operaModel.solve();
                 controlCounter++;
             }
         }
         // if Spark cluster is under utilized scale it down one by one until bring it to the normal range.
+        // or we get down to one analytic container.
         controlCounter = 1;
         if (analyticCPUUtil < analyticCPULowUtil) {
             operaModel.SetNodeMultiplicity("AnalyticHost", --analyticContNo);
             operaModel.solve();
-            while (operaModel.GetUtilizationNode("AnalyticHost", "CPU") < analyticCPULowUtil && controlCounter < 4) {
+            while (operaModel.GetUtilizationNode("AnalyticHost", "CPU") < analyticCPULowUtil && controlCounter < 4 && analyticContNo > 1) {
                 operaModel.SetNodeMultiplicity("AnalyticHost", --analyticContNo);
                 operaModel.solve();
                 controlCounter++;
@@ -169,11 +170,11 @@ public class OperaInterface {
         return newDeployment;
     }
 
-    public void calibrateModel(MetricCollection theMetrics){
-        Double cpuLBUtil = theMetrics.Get("docker.cpu-utilization", "legis/legis.load-balancer") /100;
-        Double cpuWebUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.web-worker*") /100;
+    public void calibrateModel(MetricCollection theMetrics) {
+        Double cpuLBUtil = theMetrics.Get("docker.cpu-utilization", "legis/legis.load-balancer") / 100;
+        Double cpuWebUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.web-worker*") / 100;
         Double cpuAnalyticUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.spark-worker*") / 100;
-        Double cpuDBUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/cassandra.*") /100;
+        Double cpuDBUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/cassandra.*") / 100;
         Double throughput = theMetrics.Get("throughput", "legis/legis.load-balancer/find-routes") / 1000;
         Double respTime = theMetrics.Get("response-time", "legis/legis.load-balancer/find-routes");
         Double arrival = theMetrics.Get("count-users", "legis/legis.load-balancer/find-routes");
