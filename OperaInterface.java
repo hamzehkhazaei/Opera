@@ -34,8 +34,8 @@ public class OperaInterface {
     private String finalModel;
 
 
-    OperaInterface(String inputModel, String kalmanConfigFile, String metricsFile, String kalmanIterationCount, int thinkTime, int startLine,
-                   int sampleNo, int noOfScenarios, String finalModel) throws FileNotFoundException, UnsupportedEncodingException {
+    public OperaInterface(String inputModel, String kalmanConfigFile, String metricsFile, String kalmanIterationCount, int thinkTime, int startLine,
+                          int sampleNo, int noOfScenarios, String finalModel) throws FileNotFoundException, UnsupportedEncodingException {
         operaModel = new OperaModel();
         this.thinkTime = thinkTime;
         this.inputModel = inputModel;
