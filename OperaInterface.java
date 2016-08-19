@@ -18,6 +18,9 @@ import java.util.HashMap;
  */
 public class OperaInterface {
 
+    public static final int NO_SCENARIOS = 1;
+    public static final int THINK_TIME = 500;
+
     private OperaModel operaModel = null;
     private KalmanEstimator theEstimator;
     private int thinkTime;
@@ -47,7 +50,7 @@ public class OperaInterface {
 
     public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
         OperaInterface oi = new OperaInterface("./input/BigDataApp.model.pxl", "./input/BigDataApp.kalman.config", "./input/metrics2.txt",
-                "15", 500, 80, 5, 1, "./output/FinalModel.pxl");
+                "15", OperaInterface.THINK_TIME, 80, 5, OperaInterface.NO_SCENARIOS, "./output/FinalModel.pxl");
         oi.trainModel();
         MetricCollection theMetrics = new MetricCollection();
         oi.calibrateModel(theMetrics);
@@ -105,7 +108,6 @@ public class OperaInterface {
 
     }
 
-
     /*
      * this method returns the new number of web and analytic containers to bring the cpu utilization to the
      * desired range.
@@ -142,7 +144,6 @@ public class OperaInterface {
                 controlCounter++;
             }
         }
-
         // if Spark cluster is over utilized scale it up one by one until bring it to the normal range.
         controlCounter = 1;
         if (analyticCPUUtil > analyticCPUUPUtil) {
