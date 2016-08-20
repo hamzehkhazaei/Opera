@@ -1,10 +1,10 @@
 package opera.KalmanFilter;
 
 
-import java.io.*;
-
 import opera.Core.Matrix;
 import opera.OperaModel;
+
+import java.io.*;
 
 public class KalmanEstimator implements Estimator
 {
@@ -382,7 +382,7 @@ public class KalmanEstimator implements Estimator
 				if (shouldStop)
 					break;
 			}
-
+			//todo: comment here not to have output
 			System.out.println(this.GetErrorAsTable(this.measuredMetrics, this.estimatedMetrics));
 		}
 

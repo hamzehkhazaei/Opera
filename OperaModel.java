@@ -740,7 +740,7 @@ public class OperaModel {
                 .withSetting(KalmanConfiguration.ITERATIONS_MAX, "10");
 
         theEstimator = new KalmanEstimator(kalmanConfig);
-        MeasuresUtil rm = new MeasuresUtil("./input/measured_metrics.txt", 80, 3);
+        MeasuresUtil rm = new MeasuresUtil("./input/exp6_metrics.txt", 72, 380, MeasuresUtil.FILE_TYPE_2);
 
         ArrayList arrivals = rm.getArrivals();
 
@@ -780,8 +780,10 @@ public class OperaModel {
             System.out.println(results.toString());
             ModelParameter[] mp = results.getModelParametersFinal();
             theModel.writeToFile(mp);
+
         }
-        theModel.SaveModelToXmlFile("./output/FinalModel.pxl");
+        theModel.SaveModelToXmlFile("./output/FinalBigDataAppModel.pxl");
+
         theModel.writer.close();
     }
 

@@ -57,7 +57,7 @@ public class OperaInterface {
                 .withSetting(KalmanConfiguration.ITERATIONS_MAX, kalmanIterationCount);
 
         theEstimator = new KalmanEstimator(kalmanConfig);
-        MeasuresUtil rm = new MeasuresUtil(metricsFile, startLine, sampleNo);
+        MeasuresUtil rm = new MeasuresUtil(metricsFile, startLine, sampleNo, MeasuresUtil.FILE_TYPE_2);
 
         ArrayList arrivals = rm.getArrivals();
 
