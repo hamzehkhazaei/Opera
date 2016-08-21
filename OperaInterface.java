@@ -143,6 +143,7 @@ public class OperaInterface {
             }
         }
 
+        controlCounter = 1;
         // if tomcat web server is over utilized scale it up one by one until bring it to the normal range.
         if (webCPUUtil > webCPUUPUtil) {
             operaModel.SetNodeMultiplicity("WebHost", ++webContNo);
