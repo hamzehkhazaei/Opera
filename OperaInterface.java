@@ -133,10 +133,11 @@ public class OperaInterface {
         // or we get down to one analytic container.
         controlCounter = 1;
         if (analyticCPUUtil < analyticCPULowUtil) {
-            operaModel.SetNodeMultiplicity("AnalyticHost", --analyticContNo);
+            operaModel.SetNodeMultiplicity("AnalyticHost1", --analyticContNo);
             operaModel.solve();
-            while (operaModel.GetUtilizationNode("AnalyticHost", "CPU") < analyticCPULowUtil && controlCounter < 4 && analyticContNo > 1) {
-                operaModel.SetNodeMultiplicity("AnalyticHost", --analyticContNo);
+            while (operaModel.GetUtilizationNode("AnalyticHost1", "CPU") < analyticCPULowUtil && controlCounter < 4
+                    && analyticContNo > 1) {
+                operaModel.SetNodeMultiplicity("AnalyticHost1", --analyticContNo);
                 operaModel.solve();
                 controlCounter++;
             }
@@ -155,10 +156,10 @@ public class OperaInterface {
         // if Spark cluster is over utilized scale it up one by one until bring it to the normal range.
         controlCounter = 1;
         if (analyticCPUUtil > analyticCPUUPUtil) {
-            operaModel.SetNodeMultiplicity("AnalyticHost", ++analyticContNo);
+            operaModel.SetNodeMultiplicity("AnalyticHost1", ++analyticContNo);
             operaModel.solve();
-            while (operaModel.GetUtilizationNode("AnalyticHost", "CPU") > analyticCPUUPUtil && controlCounter < 4) {
-                operaModel.SetNodeMultiplicity("AnalyticHost", ++analyticContNo);
+            while (operaModel.GetUtilizationNode("AnalyticHost1", "CPU") > analyticCPUUPUtil && controlCounter < 4) {
+                operaModel.SetNodeMultiplicity("AnalyticHost1", ++analyticContNo);
                 operaModel.solve();
                 controlCounter++;
             }
