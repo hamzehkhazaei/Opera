@@ -59,7 +59,6 @@ public class OperaInterface {
         theEstimator = new KalmanEstimator(kalmanConfig);
         MeasuresUtil rm = new MeasuresUtil(metricsFile, startLine, sampleNo, MeasuresUtil.FILE_TYPE_2);
 
-        ArrayList arrivals = rm.getArrivals();
 
         HashMap metrics = rm.getMetrics();
 
@@ -69,12 +68,14 @@ public class OperaInterface {
         ArrayList cpuDBUtil = (ArrayList) metrics.get("cpuDBUtil");
         ArrayList respTime = (ArrayList) metrics.get("respTime");
         ArrayList throughput = (ArrayList) metrics.get("throughput");
+        ArrayList wl = (ArrayList) metrics.get("workload");
+
 
         // remove this loop if you don't want calibration
         for (int i = 0; i < rm.getNoOfMeasurs(); i++) // there are 30 samples
         {
             // put the workload here (arrival rate: req/s); should contain workload foreach scenario
-            Double workload = (Double) arrivals.get(i);
+            Double workload = (Double) wl.get(i);
             // put the values here, keep the order from the kalman config files
             // the values are: CPU utilization web, CPU Analytic, CPU utilization db, response times for
             // each scenario, throughput for each scenario
@@ -92,10 +93,10 @@ public class OperaInterface {
             EstimationResults results = theEstimator.EstimateModelParameters(measuredMetrics);
             System.out.println(results.toString());
             ModelParameter[] mp = results.getModelParametersFinal();
-            operaModel.writeToFile(mp);
+            operaModel.writeDemandsToFile(mp);
         }
         operaModel.SaveModelToXmlFile(finalModel);
-        operaModel.writer.close();
+        operaModel.writerForDemand.close();
 
     }
 
@@ -110,8 +111,8 @@ public class OperaInterface {
         ArrayList<Integer> newDeployment = new ArrayList<Integer>();
         Double sparkContainersCnt = theMetrics.Get("spark-containers-cn", "legis");
         Double webContainerCnt = theMetrics.Get("web-containers-cnt", "legis");
-        Double webCPUUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.web-worker*") / 100;
-        Double analyticCPUUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.spark-worker*") / 100;
+        Double webCPUUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.web-worker.*") / 100;
+        Double analyticCPUUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.spark-worker.*") / 100;
 
         int webContNo = webContainerCnt.intValue();
         int analyticContNo = sparkContainersCnt.intValue();
@@ -174,14 +175,19 @@ public class OperaInterface {
 
     public void calibrateModel(MetricCollection theMetrics) {
         Double cpuLBUtil = theMetrics.Get("docker.cpu-utilization", "legis/legis.load-balancer") / 100;
-        Double cpuWebUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.web-worker*") / 100;
-        Double cpuAnalyticUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.spark-worker*") / 100;
+        Double cpuWebUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.web-worker.*") / 100;
+        Double cpuAnalyticUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.spark-worker.*") / 100;
         Double cpuDBUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/cassandra.*") / 100;
         Double throughput = theMetrics.Get("throughput", "legis/legis.load-balancer/find-routes") / 1000;
         Double respTime = theMetrics.Get("response-time", "legis/legis.load-balancer/find-routes");
-        Double arrival = theMetrics.Get("count-users", "legis/legis.load-balancer/find-routes");
+        Double countUsers = theMetrics.Get("count-users", "legis/legis.load-balancer/find-routes");
+        int contNoSpark = (int) theMetrics.Get("spark-containers-cnt", "legis");
+        int contNoWeb = (int) (theMetrics.Get("web-containers-cnt", "legis"));
 
-        operaModel.SetPopulation("select 0", arrival * (thinkTime + respTime));
+        operaModel.SetPopulation("select 0", countUsers);
+        operaModel.SetNodeMultiplicity("WebHost", contNoWeb);
+        operaModel.SetNodeMultiplicity("AnalyticHost1", contNoSpark);
+
         operaModel.solve();
 
         double[] measuredMetrics = {cpuLBUtil, cpuWebUtil, cpuAnalyticUtil, cpuDBUtil, respTime, throughput};
@@ -189,7 +195,8 @@ public class OperaInterface {
     }
 
     public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
-        OperaInterface oi = new OperaInterface("./input/BigDataApp.model.pxl", "./input/BigDataApp.kalman.config", "./input/measured_metrics.txt",
+        OperaInterface oi = new OperaInterface("./input/BigDataApp.model.pxl", "./input/BigDataApp.kalman.config",
+                "" + "./input/measured_metrics.txt",
                 "15", OperaInterface.THINK_TIME, 80, 5, OperaInterface.NO_SCENARIOS, "./output/FinalModel.pxl");
         oi.trainModel();
         MetricCollection theMetrics = new MetricCollection();

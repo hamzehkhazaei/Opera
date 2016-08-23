@@ -9,6 +9,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import util.MeasuresUtil;
+import util.MetricCollection;
 
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
@@ -49,13 +50,22 @@ public class OperaModel {
     Document doc = null;
     Document results = null;
     XPath m_xPath = XPathFactory.newInstance().newXPath();
-    PrintWriter writer = null;
+    PrintWriter writerForDemand = null;
+    PrintWriter writerForMeasAndEst = null;
+    KalmanEstimator theEstimator = null;
+
     DecimalFormat formatter = new DecimalFormat("#0.00000");
 
     public OperaModel() throws FileNotFoundException, UnsupportedEncodingException {
         super();
-        writer = new PrintWriter("./output/modelParametersFinal.csv", "UTF-8");
-        writer.println("CPUDem_Proxy" + "," + "CPUDem_LB" + "," + "CPUDem_Web" + "," + "CPUDem_Analytic" + "," + "CPUDem_Db");
+        writerForDemand = new PrintWriter("./output/demands-2.csv", "UTF-8");
+        writerForDemand.println("CPUDem_Proxy" + "," + "CPUDem_LB" + "," + "CPUDem_Web" + "," + "CPUDem_Analytic" + "," + "CPUDem_Db");
+
+        writerForMeasAndEst = new PrintWriter("./output/measuresAndEstimated-2.csv", "UTF-8");
+        writerForMeasAndEst.println("MeasureWebUtil" + "," + "EstWebUtil" + "," + "ErrWebUtil" + "," +
+                "MeasAnalyticUtil" + "," + "EstAnalyticUtil" + "," + "ErrAnaUtil" + "," +
+                "MeasRT" + "," + "EstRT" + "," + "ErrRespTime" + "," +
+                "MeasThro" + "," + "EstThro" + "," + "ErrThro");
     }
 
 
@@ -719,30 +729,83 @@ public class OperaModel {
         }
     }
 
-    public void writeToFile(ModelParameter[] modelParameter) {
+    public void writeDemandsToFile(ModelParameter[] modelParameter) {
         StringBuilder line = new StringBuilder();
         for (ModelParameter mp : modelParameter) {
             line.append(String.valueOf(formatter.format(mp.getValue())) + ",");
         }
-        writer.println(line);
+        writerForDemand.println(line);
     }
+
+    public void writeMeasAndEstToFile(double[] measures) {
+        StringBuilder line = new StringBuilder();
+        line.append(String.format(String.valueOf(
+                formatter.format(measures[0])) + "," + formatter.format(this.GetUtilizationNode("WebHost", "CPU"))
+                + "," + formatter.format(Math.abs(measures[0] - this.GetUtilizationNode("WebHost", "CPU"))
+                / measures[0]) + "," +
+                formatter.format(measures[1]) + "," + formatter.format(this.GetUtilizationNode("AnalyticHost1",
+                "CPU")) + "," + formatter.format(Math.abs(measures[1] - this.GetUtilizationNode("AnalyticHost1",
+                "CPU")) / measures[1]) + "," +
+                formatter.format(measures[2]) + "," + formatter.format(this.GetResponseTimeScenario("select 0"))
+                + "," + formatter.format(Math.abs(measures[2] - this.GetResponseTimeScenario("select 0"))
+                / measures[2]) + "," +
+                formatter.format(measures[3]) + "," + formatter.format(this.GetThroughput("select 0")) + "," +
+                formatter.format(Math.abs(measures[3] - this.GetThroughput("select 0")) / measures[3])));
+        //todo: Here I need to add container no from measurment and model as well.
+        writerForMeasAndEst.println(line);
+    }
+
+    public MetricCollection createMetricCollection(double[] metrics) {
+        MetricCollection theMetrics = new MetricCollection();
+
+        theMetrics.Add("docker.cpu-utilization", "legis/legis.load-balancer", metrics[0] / 100);
+        theMetrics.Add("docker.cpu-utilization", "legis/legis.web-worker.*", metrics[1] / 100);
+        theMetrics.Add("docker.cpu-utilization", "legis/legis.spark-worker.*", metrics[2] / 100);
+        theMetrics.Add("docker.cpu-utilization", "legis/cassandra.*", metrics[3] / 100);
+        theMetrics.Add("throughput", "legis/legis.load-balancer/find-routes", metrics[4] / 1000);
+        theMetrics.Add("response-time", "legis/legis.load-balancer/find-routes", metrics[5]);
+
+        theMetrics.Add("count-users", "legis/legis.load-balancer/find-routes", metrics[6]);
+        theMetrics.Add("spark-containers-cnt", "legis", metrics[8]);
+        theMetrics.Add("web-containers-cnt", "legis", metrics[9]);
+
+        return theMetrics;
+    }
+
+//    public void calibrateModel(MetricCollection theMetrics) {
+//        Double cpuLBUtil = theMetrics.Get("docker.cpu-utilization", "legis/legis.load-balancer") / 100;
+//        Double cpuWebUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.web-worker.*") / 100;
+//        Double cpuAnalyticUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.spark-worker.*") / 100;
+//        Double cpuDBUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/cassandra.*") / 100;
+//        Double throughput = theMetrics.Get("throughput", "legis/legis.load-balancer/find-routes") / 1000;
+//        Double respTime = theMetrics.Get("response-time", "legis/legis.load-balancer/find-routes");
+//        Double countUsers = theMetrics.Get("count-users", "legis/legis.load-balancer/find-routes");
+//        int contNoSpark = (int) theMetrics.Get("spark-containers-cnt", "legis");
+//        int contNoWeb = (int)(theMetrics.Get("web-containers-cnt", "legis"));
+//
+//        this.SetPopulation("select 0", countUsers);
+//        this.SetNodeMultiplicity("WebHost", contNoWeb);
+//        this.SetNodeMultiplicity("AnalyticHost1", contNoSpark);
+//
+//        this.solve();
+//
+//        double[] measuredMetrics = {cpuLBUtil, cpuWebUtil, cpuAnalyticUtil, cpuDBUtil, respTime, throughput};
+//        theEstimator.EstimateModelParameters(measuredMetrics);
+//    }
 
     public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
 
         OperaModel theModel = new OperaModel();
-
         theModel.setModel("./input/BigDataApp.model.pxl");
+        EstimationResults results = null;
 
-        KalmanEstimator theEstimator = null;
         KalmanConfiguration kalmanConfig = new KalmanConfiguration();
         kalmanConfig.withConfigFile("./input/BigDataApp.kalman.config")
                 .withModel(theModel)
-                .withSetting(KalmanConfiguration.ITERATIONS_MAX, "10");
+                .withSetting(KalmanConfiguration.ITERATIONS_MAX, "30");
 
-        theEstimator = new KalmanEstimator(kalmanConfig);
-        MeasuresUtil rm = new MeasuresUtil("./input/exp6_metrics.txt", 72, 380, MeasuresUtil.FILE_TYPE_2);
-
-        ArrayList arrivals = rm.getArrivals();
+        theModel.theEstimator = new KalmanEstimator(kalmanConfig);
+        MeasuresUtil rm = new MeasuresUtil("./input/exp9_metrics.txt", 174, 220, MeasuresUtil.FILE_TYPE_2);
 
         HashMap metrics = rm.getMetrics();
 
@@ -752,39 +815,52 @@ public class OperaModel {
         ArrayList cpuDBUtil = (ArrayList) metrics.get("cpuDBUtil");
         ArrayList respTime = (ArrayList) metrics.get("respTime");
         ArrayList throughput = (ArrayList) metrics.get("throughput");
+        ArrayList workload = (ArrayList) metrics.get("workload");
+        ArrayList contNoWeb = (ArrayList) metrics.get("contNoWeb");
+        ArrayList contNoAnalytic = (ArrayList) metrics.get("contNoAnalytic");
+
 
         int noOfSenarios = 1;
-        int thinkTime = 500;
 
         // remove this loop if you don't want calibration
         for (int i = 0; i < rm.getNoOfMeasurs(); i++) // there are 30 samples
         {
             // put the workload here (arrival rate: req/s); should contain workload foreach scenario
-            Double workload = (Double) arrivals.get(i);
+            Double wl = (Double) workload.get(i);
             // put the values here, keep the order from the kalman config files
             // the values are: CPU utilization web, CPU Analytic, CPU utilization db, response times for
             // each scenario, throughput for each scenario
             Double responseTime = (Double) respTime.get(i);
 
-            // set workload in the model
+            int noOfWebContainers = ((Double) contNoWeb.get(i)).intValue();
+            int noOfAnalyticContainers = ((Double) contNoAnalytic.get(i)).intValue();
+
+            // set workload and no of containers in the model
             for (int j = 0; j < noOfSenarios; j++) {
-                theModel.SetPopulation("select 0", workload * (thinkTime + responseTime));
+                // based on formula: wl = arrivals *(thinkTime + responseTime)
+                theModel.SetPopulation("select 0", wl);
+                theModel.SetNodeMultiplicity("WebHost", noOfWebContainers);
+                theModel.SetNodeMultiplicity("AnalyticHost1", noOfAnalyticContainers);
                 // the response time should be in the "measuredMetrics" vector
             }
             theModel.solve();
 
-//            calibrate model;
-            double[] measuredMetrics = {(Double) cpuLBUtil.get(i), (Double) cpuWebUtil.get(i),
-                    (Double) cpuAnalyticUtil.get(i), (Double) cpuDBUtil.get(i), responseTime, (Double) throughput.get(i)};
-            EstimationResults results = theEstimator.EstimateModelParameters(measuredMetrics);
-            System.out.println(results.toString());
-            ModelParameter[] mp = results.getModelParametersFinal();
-            theModel.writeToFile(mp);
+            if (i % 11 == 0) { //  calibrate model every 31 iterations;
+                double[] measuredMetrics = {(Double) cpuLBUtil.get(i), (Double) cpuWebUtil.get(i),
+                        (Double) cpuAnalyticUtil.get(i), (Double) cpuDBUtil.get(i), responseTime, (Double) throughput.get(i)};
+                results = theModel.theEstimator.EstimateModelParameters(measuredMetrics);
+                ModelParameter[] mp = results.getModelParametersFinal();
+                theModel.writeDemandsToFile(mp);
+            }
 
+//            System.out.println(results.toString());
+            double[] measMetricsToSave = {(Double) cpuWebUtil.get(i), (Double) cpuAnalyticUtil.get(i), responseTime,
+                    (Double) throughput.get(i), noOfWebContainers, noOfAnalyticContainers};
+            theModel.writeMeasAndEstToFile(measMetricsToSave);
         }
         theModel.SaveModelToXmlFile("./output/FinalBigDataAppModel.pxl");
-
-        theModel.writer.close();
+        theModel.writerForDemand.close();
+        theModel.writerForMeasAndEst.close();
     }
 
 }
