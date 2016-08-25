@@ -46,26 +46,35 @@ public class OperaModel {
     private final String RESULTS_UTILIZATION_SERVICE = "/Results/Architecture/Workloads[%d]/Service[@name='%s']/@Utilization";
     private final String RESULTS_UTILIZATION_NODE = "/Results/Architecture/Workloads[%d]/Node[@name='%s']/%s/Utilization";
     private final String RESULTS_THROUGHPUT = "/Results/Architecture/Workloads[%d]/Scenario[@name='%s']/Throughput";
+    private final double acceptedErr = 0.32;
+    private final double accptedErrCPUUtil = 0.1; // cpu utilization is in [0, 1] scale.
+
     LQM model = null;
     Document doc = null;
     Document results = null;
     XPath m_xPath = XPathFactory.newInstance().newXPath();
     PrintWriter writerForDemand = null;
     PrintWriter writerForMeasAndEst = null;
+    PrintWriter writerForSimulation = null;
     KalmanEstimator theEstimator = null;
 
-    DecimalFormat formatter = new DecimalFormat("#0.00000");
+    DecimalFormat formatter = new DecimalFormat("#0.000000");
 
     public OperaModel() throws FileNotFoundException, UnsupportedEncodingException {
         super();
-        writerForDemand = new PrintWriter("./output/demands-2.csv", "UTF-8");
+        writerForDemand = new PrintWriter("./output/demands.csv", "UTF-8");
         writerForDemand.println("CPUDem_Proxy" + "," + "CPUDem_LB" + "," + "CPUDem_Web" + "," + "CPUDem_Analytic" + "," + "CPUDem_Db");
 
-        writerForMeasAndEst = new PrintWriter("./output/measuresAndEstimated-2.csv", "UTF-8");
+        writerForMeasAndEst = new PrintWriter("./output/measuresAndEstimated.csv", "UTF-8");
         writerForMeasAndEst.println("MeasureWebUtil" + "," + "EstWebUtil" + "," + "ErrWebUtil" + "," +
                 "MeasAnalyticUtil" + "," + "EstAnalyticUtil" + "," + "ErrAnaUtil" + "," +
                 "MeasRT" + "," + "EstRT" + "," + "ErrRespTime" + "," +
                 "MeasThro" + "," + "EstThro" + "," + "ErrThro");
+
+        writerForSimulation = new PrintWriter("./output/simulation-data.csv", "UTF-8");
+        writerForSimulation.println("users-count" + "," + "No-Cont-Web" + "," + "No-Cont-Analytic" + "," +
+                "No-Cont-DB" + "," + "WebCPUUtil" + "," + "AnaCPUUtil" + "," + "DBCPUUtil" + "," +
+                "Response Time" + "," + "Throughput");
     }
 
 
@@ -737,22 +746,53 @@ public class OperaModel {
         writerForDemand.println(line);
     }
 
+    /*
+     * Here we insert the measured and estimated cpu utilization in persentage %.
+     * For this reason I mulitply the values by 100 * cpu qutua
+     * The cpu qutua is from measured Cornel file.
+     */
+
     public void writeMeasAndEstToFile(double[] measures) {
         StringBuilder line = new StringBuilder();
+//        line.append(String.format(String.valueOf(
+//                formatter.format(measures[0] * 400)) + "," + formatter.format(this.GetUtilizationNode("WebHost", "CPU")
+//                * 400)
+//                + "," + formatter.format(Math.abs(measures[0] - this.GetUtilizationNode("WebHost", "CPU"))
+//                / measures[0]) + "," +
+//                formatter.format(measures[1] * 800) + "," + formatter.format(this.GetUtilizationNode("AnalyticHost1",
+//                "CPU") * 800) + "," + formatter.format(Math.abs(measures[1] - this.GetUtilizationNode("AnalyticHost1",
+//                "CPU")) / measures[1]) + "," +
+//                formatter.format(measures[2]) + "," + formatter.format(this.GetResponseTimeScenario("select 0"))
+//                + "," + formatter.format(Math.abs(measures[2] - this.GetResponseTimeScenario("select 0"))
+//                / measures[2]) + "," +
+//                formatter.format(measures[3]) + "," + formatter.format(this.GetThroughput("select 0")) + "," +
+//                formatter.format(Math.abs(measures[3] - this.GetThroughput("select 0")) / measures[3])));
+
+        // here I use different fomula to calculate the error rate for CPU utils compared to response time.
         line.append(String.format(String.valueOf(
-                formatter.format(measures[0])) + "," + formatter.format(this.GetUtilizationNode("WebHost", "CPU"))
-                + "," + formatter.format(Math.abs(measures[0] - this.GetUtilizationNode("WebHost", "CPU"))
-                / measures[0]) + "," +
-                formatter.format(measures[1]) + "," + formatter.format(this.GetUtilizationNode("AnalyticHost1",
-                "CPU")) + "," + formatter.format(Math.abs(measures[1] - this.GetUtilizationNode("AnalyticHost1",
-                "CPU")) / measures[1]) + "," +
+                formatter.format(measures[0] * 400)) + "," + formatter.format(this.GetUtilizationNode("WebHost", "CPU")
+                * 400)
+                + "," + formatter.format(Math.abs(measures[0] - this.GetUtilizationNode("WebHost", "CPU")) * 4) +
+                "," +
+                formatter.format(measures[1] * 800) + "," + formatter.format(this.GetUtilizationNode("AnalyticHost1",
+                "CPU") * 800) + "," + formatter.format(Math.abs(measures[1] - this.GetUtilizationNode("AnalyticHost1",
+                "CPU")) * 8) + "," +
                 formatter.format(measures[2]) + "," + formatter.format(this.GetResponseTimeScenario("select 0"))
                 + "," + formatter.format(Math.abs(measures[2] - this.GetResponseTimeScenario("select 0"))
                 / measures[2]) + "," +
                 formatter.format(measures[3]) + "," + formatter.format(this.GetThroughput("select 0")) + "," +
                 formatter.format(Math.abs(measures[3] - this.GetThroughput("select 0")) / measures[3])));
+
         //todo: Here I need to add container no from measurment and model as well.
         writerForMeasAndEst.println(line);
+    }
+
+    public void writeSimulationDataToFile(double[] estValues) {
+        StringBuilder line = new StringBuilder();
+        for (int i = 0; i < estValues.length; i++) {
+            line.append(String.valueOf(formatter.format(estValues[i])) + ",");
+        }
+        writerForSimulation.println(line);
     }
 
     public MetricCollection createMetricCollection(double[] metrics) {
@@ -770,6 +810,33 @@ public class OperaModel {
         theMetrics.Add("web-containers-cnt", "legis", metrics[9]);
 
         return theMetrics;
+    }
+
+    public boolean clibrationIsNeeded(double[] measuredMetrics) {
+        double measuredRT = measuredMetrics[4];
+        double measuredThro = measuredMetrics[5];
+        double measuredWebCPUUtil = measuredMetrics[1];
+        double measuredAnaCPUUtil = measuredMetrics[2];
+
+        double estimatedRT = this.GetResponseTimeScenario("select 0");
+        double estimatedThro = this.GetThroughput("select 0");
+        double estimatedWebCPU = this.GetUtilizationNode("WebHost", "CPU");
+        double estimatedAnaCPU = this.GetUtilizationNode("AnalyticHost1", "CPU");
+
+        double respTimeErr = Math.abs(measuredRT - estimatedRT) / measuredRT;
+        double throughputErr = Math.abs(measuredThro - estimatedThro) / measuredThro;
+
+        // here I use only difference between estimated and measured value and don't divide by actual value.
+        // This formula is make more sense for cpu utilization
+        double cpuUtilWebErr = Math.abs(measuredWebCPUUtil - estimatedWebCPU);
+        double cpuUtilAnaErr = Math.abs(measuredAnaCPUUtil - estimatedAnaCPU);
+
+
+        if (respTimeErr >= acceptedErr || throughputErr >= acceptedErr || cpuUtilAnaErr >= accptedErrCPUUtil ||
+                cpuUtilWebErr >= accptedErrCPUUtil) {
+            return true;
+        }
+        return false;
     }
 
 //    public void calibrateModel(MetricCollection theMetrics) {
@@ -798,6 +865,7 @@ public class OperaModel {
         OperaModel theModel = new OperaModel();
         theModel.setModel("./input/BigDataApp.model.pxl");
         EstimationResults results = null;
+        boolean doSimulation = true;
 
         KalmanConfiguration kalmanConfig = new KalmanConfiguration();
         kalmanConfig.withConfigFile("./input/BigDataApp.kalman.config")
@@ -805,7 +873,7 @@ public class OperaModel {
                 .withSetting(KalmanConfiguration.ITERATIONS_MAX, "30");
 
         theModel.theEstimator = new KalmanEstimator(kalmanConfig);
-        MeasuresUtil rm = new MeasuresUtil("./input/exp9_metrics.txt", 174, 220, MeasuresUtil.FILE_TYPE_2);
+        MeasuresUtil rm = new MeasuresUtil("./input/exp12_metrics.txt", 51, 600, MeasuresUtil.FILE_TYPE_2);
 
         HashMap metrics = rm.getMetrics();
 
@@ -819,8 +887,10 @@ public class OperaModel {
         ArrayList contNoWeb = (ArrayList) metrics.get("contNoWeb");
         ArrayList contNoAnalytic = (ArrayList) metrics.get("contNoAnalytic");
 
-
+        int lastNoOfWebConts = 0;
+        int lastNoOfAnaConts = 0;
         int noOfSenarios = 1;
+        int noOfCalibaration = 0;
 
         // remove this loop if you don't want calibration
         for (int i = 0; i < rm.getNoOfMeasurs(); i++) // there are 30 samples
@@ -835,6 +905,9 @@ public class OperaModel {
             int noOfWebContainers = ((Double) contNoWeb.get(i)).intValue();
             int noOfAnalyticContainers = ((Double) contNoAnalytic.get(i)).intValue();
 
+            double[] measuredMetrics = {(Double) cpuLBUtil.get(i), (Double) cpuWebUtil.get(i),
+                    (Double) cpuAnalyticUtil.get(i), (Double) cpuDBUtil.get(i), responseTime, (Double) throughput.get(i)};
+
             // set workload and no of containers in the model
             for (int j = 0; j < noOfSenarios; j++) {
                 // based on formula: wl = arrivals *(thinkTime + responseTime)
@@ -845,22 +918,54 @@ public class OperaModel {
             }
             theModel.solve();
 
-            if (i % 11 == 0) { //  calibrate model every 31 iterations;
-                double[] measuredMetrics = {(Double) cpuLBUtil.get(i), (Double) cpuWebUtil.get(i),
-                        (Double) cpuAnalyticUtil.get(i), (Double) cpuDBUtil.get(i), responseTime, (Double) throughput.get(i)};
+
+          /* Calibration Conditions:
+           * if (i % x == 0 || theModel.clibrationIsNeeded(measuredMetrics)) {
+           *  calibrate model every x iterations; solution one
+           *  or for now we control the error and do the calibaration whenever is needed
+           *  For simulation part we do calibration whenever no of container change.
+           */
+            if (theModel.clibrationIsNeeded(measuredMetrics) || lastNoOfAnaConts != noOfAnalyticContainers ||
+                    lastNoOfWebConts != noOfWebContainers) {
                 results = theModel.theEstimator.EstimateModelParameters(measuredMetrics);
                 ModelParameter[] mp = results.getModelParametersFinal();
                 theModel.writeDemandsToFile(mp);
+                noOfCalibaration++;
             }
 
+            // I store last values to see if they changed
+            lastNoOfAnaConts = noOfAnalyticContainers;
+            lastNoOfWebConts = noOfWebContainers;
+
+            /*
+             * Here I use the model to immitate the system.
+             */
+            if (doSimulation) {
+                double[] estToSave = {wl, noOfWebContainers, noOfAnalyticContainers, 1,
+                        theModel.GetUtilizationNode("WebHost", "CPU") * 400,
+                        theModel.GetUtilizationNode("AnalyticHost1", "CPU") * 800,
+                        theModel.GetUtilizationNode("DataHost", "CPU") * 400,
+                        theModel.GetResponseTimeScenario("select 0") / 1000,
+                        theModel.GetThroughput("select 0"),
+                };
+                theModel.writeSimulationDataToFile(estToSave);
+            }
+
+            // comment following line to not to have the tabular output.
 //            System.out.println(results.toString());
             double[] measMetricsToSave = {(Double) cpuWebUtil.get(i), (Double) cpuAnalyticUtil.get(i), responseTime,
                     (Double) throughput.get(i), noOfWebContainers, noOfAnalyticContainers};
             theModel.writeMeasAndEstToFile(measMetricsToSave);
         }
         theModel.SaveModelToXmlFile("./output/FinalBigDataAppModel.pxl");
+
+        double calibPercentage = (double) rm.getNoOfMeasurs() / noOfCalibaration;
+        System.out.println("No of calibration: " + noOfCalibaration);
+        System.out.println("Calibration Interval (minute): " + calibPercentage);
+
         theModel.writerForDemand.close();
         theModel.writerForMeasAndEst.close();
+        theModel.writerForSimulation.close();
     }
 
 }

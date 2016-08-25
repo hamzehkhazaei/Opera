@@ -358,7 +358,8 @@ public class KalmanEstimator implements Estimator
 			
 			{
 				// temporary check for "Error Stopping Criteria"
-				double errorAccepted = 0.1;
+				//todo: stop criteria for Kalman
+				double errorAccepted = 0.01;
 				double errorAvg = 0;
 				boolean shouldStop = true;
 				boolean forEach = true;
@@ -383,7 +384,7 @@ public class KalmanEstimator implements Estimator
 					break;
 			}
 			//todo: comment here not to have output
-			System.out.println(this.GetErrorAsTable(this.measuredMetrics, this.estimatedMetrics));
+//			System.out.println(this.GetErrorAsTable(this.measuredMetrics, this.estimatedMetrics));
 		}
 
 		// save the model if it's required

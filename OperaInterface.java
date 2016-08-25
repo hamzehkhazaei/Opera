@@ -3,14 +3,11 @@ package opera;
 import opera.KalmanFilter.EstimationResults;
 import opera.KalmanFilter.KalmanConfiguration;
 import opera.KalmanFilter.KalmanEstimator;
-import opera.KalmanFilter.ModelParameter;
-import util.MeasuresUtil;
 import util.MetricCollection;
 
 import java.io.FileNotFoundException;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
-import java.util.HashMap;
 
 /**
  * Created by hamzeh on 2016-08-18.
@@ -34,9 +31,8 @@ public class OperaInterface {
     private String finalModel;
 
 
-    public OperaInterface(String inputModel, String kalmanConfigFile, String metricsFile, String kalmanIterationCount, int thinkTime, int startLine,
-                          int sampleNo, int noOfScenarios, String finalModel) throws FileNotFoundException, UnsupportedEncodingException {
-        operaModel = new OperaModel();
+    public OperaInterface(String inputModel, String kalmanConfigFile, String metricsFile, String kalmanIterationCount,
+                          int thinkTime, int startLine, int sampleNo, int noOfScenarios, String finalModel) {
         this.thinkTime = thinkTime;
         this.inputModel = inputModel;
         this.kalmanConfigFile = kalmanConfigFile;
@@ -46,59 +42,72 @@ public class OperaInterface {
         this.sampleNo = sampleNo;
         this.noOfScenarios = noOfScenarios;
         this.finalModel = finalModel;
-    }
 
-    private void trainModel() throws FileNotFoundException, UnsupportedEncodingException {
-        operaModel.setModel(inputModel);
+        try {
+            operaModel = new OperaModel();
+            operaModel.setModel(inputModel);
 
-        KalmanConfiguration kalmanConfig = new KalmanConfiguration();
-        kalmanConfig.withConfigFile(kalmanConfigFile)
-                .withModel(operaModel)
-                .withSetting(KalmanConfiguration.ITERATIONS_MAX, kalmanIterationCount);
+            KalmanConfiguration kalmanConfig = new KalmanConfiguration();
+            kalmanConfig.withConfigFile(kalmanConfigFile)
+                    .withModel(operaModel)
+                    .withSetting(KalmanConfiguration.ITERATIONS_MAX, kalmanIterationCount);
 
-        theEstimator = new KalmanEstimator(kalmanConfig);
-        MeasuresUtil rm = new MeasuresUtil(metricsFile, startLine, sampleNo, MeasuresUtil.FILE_TYPE_2);
-
-
-        HashMap metrics = rm.getMetrics();
-
-        ArrayList cpuLBUtil = (ArrayList) metrics.get("cpuLBUtil");
-        ArrayList cpuWebUtil = (ArrayList) metrics.get("cpuWebUtil");
-        ArrayList cpuAnalyticUtil = (ArrayList) metrics.get("cpuAnalyticUtil");
-        ArrayList cpuDBUtil = (ArrayList) metrics.get("cpuDBUtil");
-        ArrayList respTime = (ArrayList) metrics.get("respTime");
-        ArrayList throughput = (ArrayList) metrics.get("throughput");
-        ArrayList wl = (ArrayList) metrics.get("workload");
-
-
-        // remove this loop if you don't want calibration
-        for (int i = 0; i < rm.getNoOfMeasurs(); i++) // there are 30 samples
-        {
-            // put the workload here (arrival rate: req/s); should contain workload foreach scenario
-            Double workload = (Double) wl.get(i);
-            // put the values here, keep the order from the kalman config files
-            // the values are: CPU utilization web, CPU Analytic, CPU utilization db, response times for
-            // each scenario, throughput for each scenario
-            Double responseTime = (Double) respTime.get(i);
-
-            // set workload in the model
-            for (int j = 0; j < noOfScenarios; j++) {
-                operaModel.SetPopulation("select 0", workload * (thinkTime + responseTime));
-                // the response time should be in the "measuredMetrics" vector
-            }
-            operaModel.solve();
-
-            double[] measuredMetrics = {(Double) cpuLBUtil.get(i), (Double) cpuWebUtil.get(i),
-                    (Double) cpuAnalyticUtil.get(i), (Double) cpuDBUtil.get(i), responseTime, (Double) throughput.get(i)};
-            EstimationResults results = theEstimator.EstimateModelParameters(measuredMetrics);
-            System.out.println(results.toString());
-            ModelParameter[] mp = results.getModelParametersFinal();
-            operaModel.writeDemandsToFile(mp);
+            theEstimator = new KalmanEstimator(kalmanConfig);
+        } catch (Exception ex) {
+            ex.printStackTrace();
         }
-        operaModel.SaveModelToXmlFile(finalModel);
-        operaModel.writerForDemand.close();
-
     }
+
+	    /*
+        private void trainModel() throws FileNotFoundException, UnsupportedEncodingException {
+	        operaModel.setModel(inputModel);
+
+	        KalmanConfiguration kalmanConfig = new KalmanConfiguration();
+	        kalmanConfig.withConfigFile(kalmanConfigFile)
+	                .withModel(operaModel)
+	                .withSetting(KalmanConfiguration.ITERATIONS_MAX, kalmanIterationCount);
+
+	        theEstimator = new KalmanEstimator(kalmanConfig);
+	        MeasuresUtil rm = new MeasuresUtil(metricsFile, startLine, sampleNo, MeasuresUtil.FILE_TYPE_2);
+
+	        ArrayList<Double> arrivals = rm.getArrivals();
+
+	        HashMap metrics = rm.getMetrics();
+
+	        ArrayList cpuLBUtil = (ArrayList) metrics.get("cpuLBUtil");
+	        ArrayList cpuWebUtil = (ArrayList) metrics.get("cpuWebUtil");
+	        ArrayList cpuAnalyticUtil = (ArrayList) metrics.get("cpuAnalyticUtil");
+	        ArrayList cpuDBUtil = (ArrayList) metrics.get("cpuDBUtil");
+	        ArrayList<Double> respTime = (ArrayList) metrics.get("respTime");
+	        ArrayList throughput = (ArrayList) metrics.get("throughput");
+
+	        // remove this loop if you don't want calibration
+	        for (int i = 0; i < rm.getNoOfMeasurs(); i++) // there are 30 samples
+	        {
+	            // put the workload here (arrival rate: req/s); should contain workload foreach scenario
+	            Double workload = arrivals.get(i);
+	            // put the values here, keep the order from the kalman config files
+	            // the values are: CPU utilization web, CPU Analytic, CPU utilization db, response times for
+	            // each scenario, throughput for each scenario
+	            Double responseTime = respTime.get(i);
+
+	            // set workload in the model
+	            for (int j = 0; j < noOfScenarios; j++) {
+	                operaModel.SetPopulation("select 0", workload * (thinkTime + responseTime));
+	                // the response time should be in the "measuredMetrics" vector
+	            }
+	            operaModel.solve();
+
+	            double[] measuredMetrics = {(Double) cpuLBUtil.get(i), (Double) cpuWebUtil.get(i),
+	                    (Double) cpuAnalyticUtil.get(i), (Double) cpuDBUtil.get(i), responseTime, (Double) throughput.get(i)};
+	            EstimationResults results = theEstimator.EstimateModelParameters(measuredMetrics);
+	            System.out.println(results.toString());
+	            ModelParameter[] mp = results.getModelParametersFinal();
+	            operaModel.writeToFile(mp);
+	        }
+	        operaModel.SaveModelToXmlFile(finalModel);
+	    }
+	    */
 
     /*
      * this method returns the new number of web and analytic containers to bring the cpu utilization to the
@@ -106,13 +115,33 @@ public class OperaInterface {
      */
     public ArrayList<Integer> getContainersCnt(MetricCollection theMetrics, Double webCPULowUtil, Double webCPUUPUtil,
                                                Double analyticCPULowUtil, Double analyticCPUUPUtil) {
-        calibrateModel(theMetrics);
+        //calibrateModel(theMetrics);
+        // add data from the model
+        theMetrics.Add("cpu-utilization", "opera/legis/proxy-virtual", 100 * operaModel.GetUtilizationNode("ProxyHost", "CPU"));
+        theMetrics.Add("cpu-utilization", "opera/legis/cassandra", 100 * operaModel.GetUtilizationNode("DataHost", "CPU"));
+        theMetrics.Add("cpu-utilization", "opera/legis/load-balancer", 100 * operaModel.GetUtilizationNode("LBHost", "CPU"));
+        theMetrics.Add("cpu-utilization", "opera/legis/web-workers", 100 * operaModel.GetUtilizationNode("WebHost", "CPU"));
+        theMetrics.Add("cpu-utilization", "opera/legis/spark-workers", 100 * operaModel.GetUtilizationNode("AnalyticHost1", "CPU"));
+        theMetrics.Add("cpu-utilization", "opera/legis/spark-virtual", 100 * operaModel.GetUtilizationNode("AnalyticHost2", "CPU"));
+        theMetrics.Add("response-time", "opera/legis/find-routes", operaModel.GetResponseTimeScenario("select 0"));
+        theMetrics.Add("throughput", "opera/legis/find-routes", 1000 * operaModel.GetThroughput("select 0"));
+
+        theMetrics.Add("cpu-demand", "opera/legis/proxy-virtual", operaModel.GetCpuDemand("select 0", "ProxyServer"));
+        theMetrics.Add("cpu-demand", "opera/legis/cassandra", operaModel.GetCpuDemand("select 0", "Database"));
+        theMetrics.Add("cpu-demand", "opera/legis/load-balancer", operaModel.GetCpuDemand("select 0", "LBServer"));
+        theMetrics.Add("cpu-demand", "opera/legis/web-workers", operaModel.GetCpuDemand("select 0", "WebServer"));
+        theMetrics.Add("cpu-demand", "opera/legis/spark-workers", operaModel.GetCpuDemand("select 0", "AnalyticServer1"));
+        theMetrics.Add("cpu-demand", "opera/legis/spark-virtual", operaModel.GetCpuDemand("select 0", "AnalyticServer2"));
 
         ArrayList<Integer> newDeployment = new ArrayList<Integer>();
-        Double sparkContainersCnt = theMetrics.Get("spark-containers-cn", "legis");
+        Double sparkContainersCnt = theMetrics.Get("spark-containers-cnt", "legis");
         Double webContainerCnt = theMetrics.Get("web-containers-cnt", "legis");
         Double webCPUUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.web-worker.*") / 100;
         Double analyticCPUUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.spark-worker.*") / 100;
+        webCPULowUtil /= 100;
+        webCPUUPUtil /= 100;
+        analyticCPULowUtil /= 100;
+        analyticCPUUPUtil /= 100;
 
         int webContNo = webContainerCnt.intValue();
         int analyticContNo = sparkContainersCnt.intValue();
@@ -122,49 +151,45 @@ public class OperaInterface {
         // if Web cluster is under utilized scale it down one by one until bring it to the normal range or we get down to
         // one web container.
         if (webCPUUtil < webCPULowUtil) {
-            operaModel.SetNodeMultiplicity("WebHost", --webContNo);
-            operaModel.solve();
-            while (operaModel.GetUtilizationNode("WebHost", "CPU") < webCPULowUtil && controlCounter < 4 && webContNo > 1) {
+            do {
                 operaModel.SetNodeMultiplicity("WebHost", --webContNo);
                 operaModel.solve();
                 controlCounter++;
             }
+            while (operaModel.GetUtilizationNode("WebHost", "CPU") < webCPULowUtil && controlCounter < 4 && webContNo > 1);
         }
+
         // if Spark cluster is under utilized scale it down one by one until bring it to the normal range.
         // or we get down to one analytic container.
         controlCounter = 1;
         if (analyticCPUUtil < analyticCPULowUtil) {
-            operaModel.SetNodeMultiplicity("AnalyticHost1", --analyticContNo);
-            operaModel.solve();
-            while (operaModel.GetUtilizationNode("AnalyticHost1", "CPU") < analyticCPULowUtil && controlCounter < 4
-                    && analyticContNo > 1) {
+            do {
                 operaModel.SetNodeMultiplicity("AnalyticHost1", --analyticContNo);
                 operaModel.solve();
                 controlCounter++;
             }
+            while (operaModel.GetUtilizationNode("AnalyticHost1", "CPU") < analyticCPULowUtil && controlCounter < 4 && analyticContNo > 1);
         }
 
-        controlCounter = 1;
         // if tomcat web server is over utilized scale it up one by one until bring it to the normal range.
         if (webCPUUtil > webCPUUPUtil) {
-            operaModel.SetNodeMultiplicity("WebHost", ++webContNo);
-            operaModel.solve();
-            while (operaModel.GetUtilizationNode("WebHost", "CPU") > webCPUUPUtil && controlCounter < 4) {
+            do {
                 operaModel.SetNodeMultiplicity("WebHost", ++webContNo);
                 operaModel.solve();
                 controlCounter++;
             }
+            while (operaModel.GetUtilizationNode("WebHost", "CPU") > webCPUUPUtil && controlCounter < 4);
         }
+
         // if Spark cluster is over utilized scale it up one by one until bring it to the normal range.
         controlCounter = 1;
         if (analyticCPUUtil > analyticCPUUPUtil) {
-            operaModel.SetNodeMultiplicity("AnalyticHost1", ++analyticContNo);
-            operaModel.solve();
-            while (operaModel.GetUtilizationNode("AnalyticHost1", "CPU") > analyticCPUUPUtil && controlCounter < 4) {
+            do {
                 operaModel.SetNodeMultiplicity("AnalyticHost1", ++analyticContNo);
                 operaModel.solve();
                 controlCounter++;
             }
+            while (operaModel.GetUtilizationNode("AnalyticHost1", "CPU") > analyticCPUUPUtil && controlCounter < 4);
         }
 
         newDeployment.add(webContNo);
@@ -180,25 +205,24 @@ public class OperaInterface {
         Double cpuDBUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/cassandra.*") / 100;
         Double throughput = theMetrics.Get("throughput", "legis/legis.load-balancer/find-routes") / 1000;
         Double respTime = theMetrics.Get("response-time", "legis/legis.load-balancer/find-routes");
-        Double countUsers = theMetrics.Get("count-users", "legis/legis.load-balancer/find-routes");
-        int contNoSpark = (int) theMetrics.Get("spark-containers-cnt", "legis");
-        int contNoWeb = (int) (theMetrics.Get("web-containers-cnt", "legis"));
+        Double cntUsers = theMetrics.Get("count-users", "legis/legis.load-balancer/find-routes");
+        Double sparkContainersCnt = theMetrics.Get("spark-containers-cnt", "legis");
+        Double webContainerCnt = theMetrics.Get("web-containers-cnt", "legis");
 
-        operaModel.SetPopulation("select 0", countUsers);
-        operaModel.SetNodeMultiplicity("WebHost", contNoWeb);
-        operaModel.SetNodeMultiplicity("AnalyticHost1", contNoSpark);
-
+        operaModel.SetNodeMultiplicity("WebHost", webContainerCnt.intValue());
+        operaModel.SetNodeMultiplicity("AnalyticHost1", sparkContainersCnt.intValue());
+        operaModel.SetPopulation("select 0", cntUsers);
         operaModel.solve();
 
         double[] measuredMetrics = {cpuLBUtil, cpuWebUtil, cpuAnalyticUtil, cpuDBUtil, respTime, throughput};
-        theEstimator.EstimateModelParameters(measuredMetrics);
+        EstimationResults res = theEstimator.EstimateModelParameters(measuredMetrics);
+        System.out.println(res);
     }
 
     public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
-        OperaInterface oi = new OperaInterface("./input/BigDataApp.model.pxl", "./input/BigDataApp.kalman.config",
-                "" + "./input/measured_metrics.txt",
+        OperaInterface oi = new OperaInterface("./input/BigDataApp.model.pxl", "./input/BigDataApp.kalman.config", "./input/measured_metrics.txt",
                 "15", OperaInterface.THINK_TIME, 80, 5, OperaInterface.NO_SCENARIOS, "./output/FinalModel.pxl");
-        oi.trainModel();
+        //oi.trainModel();
         MetricCollection theMetrics = new MetricCollection();
         oi.calibrateModel(theMetrics);
         oi.getContainersCnt(theMetrics, 20.0, 80.0, 20.0, 80.0);
