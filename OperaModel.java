@@ -9,7 +9,6 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import util.MeasuresUtil;
-import util.MetricCollection;
 
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
@@ -55,7 +54,6 @@ public class OperaModel {
     XPath m_xPath = XPathFactory.newInstance().newXPath();
     PrintWriter writerForDemand = null;
     PrintWriter writerForMeasAndEst = null;
-    PrintWriter writerForSimulation = null;
     KalmanEstimator theEstimator = null;
 
     DecimalFormat formatter = new DecimalFormat("#0.000000");
@@ -63,18 +61,14 @@ public class OperaModel {
     public OperaModel() throws FileNotFoundException, UnsupportedEncodingException {
         super();
         writerForDemand = new PrintWriter("./output/demands.csv", "UTF-8");
-        writerForDemand.println("CPUDem_Proxy" + "," + "CPUDem_LB" + "," + "CPUDem_Web" + "," + "CPUDem_Analytic" + "," + "CPUDem_Db");
+        writerForDemand.println("CPUDem_LB" + "," + "CPUDem_Web" + "," + "CPUDem_Analytic1" + "," + "CPUDem_Db" + "," + "CPUDem_Analytic2");
 
         writerForMeasAndEst = new PrintWriter("./output/measuresAndEstimated.csv", "UTF-8");
-        writerForMeasAndEst.println("MeasureWebUtil" + "," + "EstWebUtil" + "," + "ErrWebUtil" + "," +
-                "MeasAnalyticUtil" + "," + "EstAnalyticUtil" + "," + "ErrAnaUtil" + "," +
-                "MeasRT" + "," + "EstRT" + "," + "ErrRespTime" + "," +
-                "MeasThro" + "," + "EstThro" + "," + "ErrThro");
-
-        writerForSimulation = new PrintWriter("./output/simulation-data.csv", "UTF-8");
-        writerForSimulation.println("users-count" + "," + "No-Cont-Web" + "," + "No-Cont-Analytic" + "," +
-                "No-Cont-DB" + "," + "WebCPUUtil" + "," + "AnaCPUUtil" + "," + "DBCPUUtil" + "," +
-                "Response Time" + "," + "Throughput");
+        writerForMeasAndEst.println("User-Count" + "," + "Arrival-Rate" + "," + "MeasureWebUtil" + "," + "EstWebUtil" +
+                "," + "ErrWebUtil" + "," + "MeasAnalytic1Util" + "," + "EstAnalytic1Util" + "," + "ErrAna1Util" + "," +
+                "MeasDBUtil" + "," + "EstDBUtil" + "," + "ErrDBUtil" + "," + "EstAnalytic2Util" + ","
+                + "MeasRT" + "," + "EstRT" + "," + "ErrRespTime" + "," +
+                "MeasThro" + "," + "EstThro" + "," + "ErrThro" + "," + "No-Web-Cont" + "," + "No-Analytic-Cont" + "," + "No-DB-Cont");
     }
 
 
@@ -740,6 +734,7 @@ public class OperaModel {
 
     public void writeDemandsToFile(ModelParameter[] modelParameter) {
         StringBuilder line = new StringBuilder();
+        if (modelParameter == null) return;
         for (ModelParameter mp : modelParameter) {
             line.append(String.valueOf(formatter.format(mp.getValue())) + ",");
         }
@@ -751,65 +746,36 @@ public class OperaModel {
      * For this reason I mulitply the values by 100 * cpu qutua
      * The cpu qutua is from measured Cornel file.
      */
-
     public void writeMeasAndEstToFile(double[] measures) {
         StringBuilder line = new StringBuilder();
-//        line.append(String.format(String.valueOf(
-//                formatter.format(measures[0] * 400)) + "," + formatter.format(this.GetUtilizationNode("WebHost", "CPU")
-//                * 400)
-//                + "," + formatter.format(Math.abs(measures[0] - this.GetUtilizationNode("WebHost", "CPU"))
-//                / measures[0]) + "," +
-//                formatter.format(measures[1] * 800) + "," + formatter.format(this.GetUtilizationNode("AnalyticHost1",
-//                "CPU") * 800) + "," + formatter.format(Math.abs(measures[1] - this.GetUtilizationNode("AnalyticHost1",
-//                "CPU")) / measures[1]) + "," +
-//                formatter.format(measures[2]) + "," + formatter.format(this.GetResponseTimeScenario("select 0"))
-//                + "," + formatter.format(Math.abs(measures[2] - this.GetResponseTimeScenario("select 0"))
-//                / measures[2]) + "," +
-//                formatter.format(measures[3]) + "," + formatter.format(this.GetThroughput("select 0")) + "," +
-//                formatter.format(Math.abs(measures[3] - this.GetThroughput("select 0")) / measures[3])));
 
-        // here I use different fomula to calculate the error rate for CPU utils compared to response time.
-        line.append(String.format(String.valueOf(
-                formatter.format(measures[0] * 400)) + "," + formatter.format(this.GetUtilizationNode("WebHost", "CPU")
-                * 400)
-                + "," + formatter.format(Math.abs(measures[0] - this.GetUtilizationNode("WebHost", "CPU")) * 4) +
-                "," +
-                formatter.format(measures[1] * 800) + "," + formatter.format(this.GetUtilizationNode("AnalyticHost1",
-                "CPU") * 800) + "," + formatter.format(Math.abs(measures[1] - this.GetUtilizationNode("AnalyticHost1",
-                "CPU")) * 8) + "," +
-                formatter.format(measures[2]) + "," + formatter.format(this.GetResponseTimeScenario("select 0"))
-                + "," + formatter.format(Math.abs(measures[2] - this.GetResponseTimeScenario("select 0"))
-                / measures[2]) + "," +
-                formatter.format(measures[3]) + "," + formatter.format(this.GetThroughput("select 0")) + "," +
-                formatter.format(Math.abs(measures[3] - this.GetThroughput("select 0")) / measures[3])));
+        // note that I use different fomula to calculate the error rate for CPU utils compared to response time.
+        // for cpu util I use reletive error while for response and throughput I use abolute error formula.
+        line.append((String.valueOf(formatter.format(measures[0]) + "," + formatter.format(measures[1]) + "," +
 
-        //todo: Here I need to add container no from measurment and model as well.
+                formatter.format(measures[2] * 400)) + "," + formatter.format(this.GetUtilizationNode("WebHost", "CPU")
+                * 400) + "," + formatter.format(Math.abs(measures[2] - this.GetUtilizationNode("WebHost", "CPU")) * 4)
+                + "," +
+                formatter.format(measures[3] * 800) + "," + formatter.format(this.GetUtilizationNode("AnalyticHost1",
+                "CPU") * 800) + "," + formatter.format(Math.abs(measures[3] - this.GetUtilizationNode("AnalyticHost1",
+                "CPU")) * 8)
+                + "," +
+                formatter.format(measures[4] * 400) + "," + formatter.format(this.GetUtilizationNode("DataHost", "CPU")
+                * 400) + "," + formatter.format(Math.abs(measures[4] - this.GetUtilizationNode("DataHost", "CPU")) * 4)
+                + "," +
+                formatter.format(this.GetUtilizationNode("AnalyticHost2", "CPU") * 100)
+                + "," +
+                formatter.format(measures[5]) + "," + formatter.format(this.GetResponseTimeScenario("select 0"))
+                + "," + formatter.format(Math.abs(measures[5] - this.GetResponseTimeScenario("select 0"))
+                / measures[5])
+                + "," +
+                formatter.format(measures[6]) + "," + formatter.format(this.GetThroughput("select 0")) + "," +
+                formatter.format(Math.abs(measures[6] - this.GetThroughput("select 0")) / measures[6])
+                + "," +
+                formatter.format(measures[7]) + "," + formatter.format(measures[8]) + "," + formatter.format
+                (measures[9])));
+
         writerForMeasAndEst.println(line);
-    }
-
-    public void writeSimulationDataToFile(double[] estValues) {
-        StringBuilder line = new StringBuilder();
-        for (int i = 0; i < estValues.length; i++) {
-            line.append(String.valueOf(formatter.format(estValues[i])) + ",");
-        }
-        writerForSimulation.println(line);
-    }
-
-    public MetricCollection createMetricCollection(double[] metrics) {
-        MetricCollection theMetrics = new MetricCollection();
-
-        theMetrics.Add("docker.cpu-utilization", "legis/legis.load-balancer", metrics[0] / 100);
-        theMetrics.Add("docker.cpu-utilization", "legis/legis.web-worker.*", metrics[1] / 100);
-        theMetrics.Add("docker.cpu-utilization", "legis/legis.spark-worker.*", metrics[2] / 100);
-        theMetrics.Add("docker.cpu-utilization", "legis/cassandra.*", metrics[3] / 100);
-        theMetrics.Add("throughput", "legis/legis.load-balancer/find-routes", metrics[4] / 1000);
-        theMetrics.Add("response-time", "legis/legis.load-balancer/find-routes", metrics[5]);
-
-        theMetrics.Add("count-users", "legis/legis.load-balancer/find-routes", metrics[6]);
-        theMetrics.Add("spark-containers-cnt", "legis", metrics[8]);
-        theMetrics.Add("web-containers-cnt", "legis", metrics[9]);
-
-        return theMetrics;
     }
 
     public boolean clibrationIsNeeded(double[] measuredMetrics) {
@@ -839,40 +805,20 @@ public class OperaModel {
         return false;
     }
 
-//    public void calibrateModel(MetricCollection theMetrics) {
-//        Double cpuLBUtil = theMetrics.Get("docker.cpu-utilization", "legis/legis.load-balancer") / 100;
-//        Double cpuWebUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.web-worker.*") / 100;
-//        Double cpuAnalyticUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/legis.spark-worker.*") / 100;
-//        Double cpuDBUtil = theMetrics.GetAverage("docker.cpu-utilization", "legis/cassandra.*") / 100;
-//        Double throughput = theMetrics.Get("throughput", "legis/legis.load-balancer/find-routes") / 1000;
-//        Double respTime = theMetrics.Get("response-time", "legis/legis.load-balancer/find-routes");
-//        Double countUsers = theMetrics.Get("count-users", "legis/legis.load-balancer/find-routes");
-//        int contNoSpark = (int) theMetrics.Get("spark-containers-cnt", "legis");
-//        int contNoWeb = (int)(theMetrics.Get("web-containers-cnt", "legis"));
-//
-//        this.SetPopulation("select 0", countUsers);
-//        this.SetNodeMultiplicity("WebHost", contNoWeb);
-//        this.SetNodeMultiplicity("AnalyticHost1", contNoSpark);
-//
-//        this.solve();
-//
-//        double[] measuredMetrics = {cpuLBUtil, cpuWebUtil, cpuAnalyticUtil, cpuDBUtil, respTime, throughput};
-//        theEstimator.EstimateModelParameters(measuredMetrics);
-//    }
 
     public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
 
-        OperaModel theModel = new OperaModel();
-        theModel.setModel("./input/BigDataApp.model.pxl");
+        OperaModel operModel = new OperaModel();
+        operModel.setModel("./input/BigDataApp.model.pxl");
         EstimationResults results = null;
-        boolean doSimulation = true;
+        ModelParameter[] mp = null;
 
         KalmanConfiguration kalmanConfig = new KalmanConfiguration();
         kalmanConfig.withConfigFile("./input/BigDataApp.kalman.config")
-                .withModel(theModel)
+                .withModel(operModel)
                 .withSetting(KalmanConfiguration.ITERATIONS_MAX, "30");
 
-        theModel.theEstimator = new KalmanEstimator(kalmanConfig);
+        operModel.theEstimator = new KalmanEstimator(kalmanConfig);
         MeasuresUtil rm = new MeasuresUtil("./input/exp12_metrics.txt", 51, 600, MeasuresUtil.FILE_TYPE_2);
 
         HashMap metrics = rm.getMetrics();
@@ -884,6 +830,7 @@ public class OperaModel {
         ArrayList respTime = (ArrayList) metrics.get("respTime");
         ArrayList throughput = (ArrayList) metrics.get("throughput");
         ArrayList workload = (ArrayList) metrics.get("workload");
+        ArrayList arrival = (ArrayList) metrics.get("arrival");
         ArrayList contNoWeb = (ArrayList) metrics.get("contNoWeb");
         ArrayList contNoAnalytic = (ArrayList) metrics.get("contNoAnalytic");
 
@@ -897,6 +844,8 @@ public class OperaModel {
         {
             // put the workload here (arrival rate: req/s); should contain workload foreach scenario
             Double wl = (Double) workload.get(i);
+            Double arr = (Double) arrival.get(i);
+
             // put the values here, keep the order from the kalman config files
             // the values are: CPU utilization web, CPU Analytic, CPU utilization db, response times for
             // each scenario, throughput for each scenario
@@ -911,25 +860,27 @@ public class OperaModel {
             // set workload and no of containers in the model
             for (int j = 0; j < noOfSenarios; j++) {
                 // based on formula: wl = arrivals *(thinkTime + responseTime)
-                theModel.SetPopulation("select 0", wl);
-                theModel.SetNodeMultiplicity("WebHost", noOfWebContainers);
-                theModel.SetNodeMultiplicity("AnalyticHost1", noOfAnalyticContainers);
+                operModel.SetPopulation("select 0", wl);
+                operModel.SetNodeMultiplicity("WebHost", noOfWebContainers);
+                operModel.SetNodeMultiplicity("AnalyticHost1", noOfAnalyticContainers);
                 // the response time should be in the "measuredMetrics" vector
             }
-            theModel.solve();
+            operModel.solve();
 
 
           /* Calibration Conditions:
-           * if (i % x == 0 || theModel.clibrationIsNeeded(measuredMetrics)) {
+           * if (i % x == 0 || operModel.clibrationIsNeeded(measuredMetrics)) {
            *  calibrate model every x iterations; solution one
            *  or for now we control the error and do the calibaration whenever is needed
            *  For simulation part we do calibration whenever no of container change.
            */
-            if (theModel.clibrationIsNeeded(measuredMetrics) || lastNoOfAnaConts != noOfAnalyticContainers ||
+            if (operModel.clibrationIsNeeded(measuredMetrics) || lastNoOfAnaConts != noOfAnalyticContainers ||
                     lastNoOfWebConts != noOfWebContainers) {
-                results = theModel.theEstimator.EstimateModelParameters(measuredMetrics);
-                ModelParameter[] mp = results.getModelParametersFinal();
-                theModel.writeDemandsToFile(mp);
+                long s = System.currentTimeMillis();
+                results = operModel.theEstimator.EstimateModelParameters(measuredMetrics);
+                long e = System.currentTimeMillis();
+                System.out.println("Calibration time: " + String.valueOf(e - s));
+                mp = results.getModelParametersFinal();
                 noOfCalibaration++;
             }
 
@@ -937,35 +888,22 @@ public class OperaModel {
             lastNoOfAnaConts = noOfAnalyticContainers;
             lastNoOfWebConts = noOfWebContainers;
 
-            /*
-             * Here I use the model to immitate the system.
-             */
-            if (doSimulation) {
-                double[] estToSave = {wl, noOfWebContainers, noOfAnalyticContainers, 1,
-                        theModel.GetUtilizationNode("WebHost", "CPU") * 400,
-                        theModel.GetUtilizationNode("AnalyticHost1", "CPU") * 800,
-                        theModel.GetUtilizationNode("DataHost", "CPU") * 400,
-                        theModel.GetResponseTimeScenario("select 0") / 1000,
-                        theModel.GetThroughput("select 0"),
-                };
-                theModel.writeSimulationDataToFile(estToSave);
-            }
-
             // comment following line to not to have the tabular output.
 //            System.out.println(results.toString());
-            double[] measMetricsToSave = {(Double) cpuWebUtil.get(i), (Double) cpuAnalyticUtil.get(i), responseTime,
-                    (Double) throughput.get(i), noOfWebContainers, noOfAnalyticContainers};
-            theModel.writeMeasAndEstToFile(measMetricsToSave);
-        }
-        theModel.SaveModelToXmlFile("./output/FinalBigDataAppModel.pxl");
+            double[] measMetricsToSave = {wl, arr,
+                    (Double) cpuWebUtil.get(i), (Double) cpuAnalyticUtil.get(i), (Double) cpuDBUtil.get(i),
+                    responseTime, (Double) throughput.get(i), noOfWebContainers, noOfAnalyticContainers, 1};
 
+            operModel.writeMeasAndEstToFile(measMetricsToSave);
+            operModel.writeDemandsToFile(mp);
+        }
+
+        operModel.SaveModelToXmlFile("./output/FinalBigDataAppModel.pxl");
         double calibPercentage = (double) rm.getNoOfMeasurs() / noOfCalibaration;
         System.out.println("No of calibration: " + noOfCalibaration);
         System.out.println("Calibration Interval (minute): " + calibPercentage);
 
-        theModel.writerForDemand.close();
-        theModel.writerForMeasAndEst.close();
-        theModel.writerForSimulation.close();
+        operModel.writerForDemand.close();
+        operModel.writerForMeasAndEst.close();
     }
-
 }
